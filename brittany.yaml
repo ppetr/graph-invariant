@@ -1,0 +1,13 @@
+# Pre-commit:
+#   find . -name \*.hs -exec brittany --write-mode=inplace '{}' '+'
+conf_layout:
+  lconfig_altChooser:
+    tag: AltChooserBoundedSearch
+    contents: 3
+  lconfig_alignmentLimit: 30
+  lconfig_indentListSpecial: true
+  lconfig_indentAmount: 2
+  lconfig_alignmentBreakOnMultiline: true
+  lconfig_indentWhereSpecial: true
+  lconfig_columnAlignMode:
+    tag: ColumnAlignModeAnimously
