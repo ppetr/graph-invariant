@@ -4,9 +4,9 @@ module Main
 
 import           Data.Attoparsec.Text           ( parseOnly )
 import qualified Data.Text.IO                  as T
-                                                ( readFile )
-import           Numeric                        ( showHex )
+import           Data.Word                      ( Word64 )
 import           System.Environment             ( getArgs )
+import           Text.Printf
 
 import           Data.Graph.Dimacs.Parse
 import           Data.Graph.Invariant.Matrix
@@ -15,11 +15,9 @@ main :: IO ()
 main = do
   [filename] <- getArgs
   t          <- T.readFile filename
-  let Right cg = parseOnly parseColored t
-  print cg
-  let u = undirected $ cgGraph cg
-  print u
-  print (incidence' u)
-  print (invariantBase cg)
-  print (invariantMatrix cg)
-  putStrLn (showHex (invariant cg) "")
+  let Right dGraph = parseOnly parseColored t
+      uGraph       = dGraph { cgGraph = undirected (cgGraph dGraph) }
+  putStrLn
+    . printf "%s,%#010x" filename
+    . (fromIntegral :: F -> Word64)
+    $ invariant uGraph

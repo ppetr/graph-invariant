@@ -22,17 +22,18 @@ import qualified Numeric.LinearAlgebra         as LA
 
 import           Data.Graph.Dimacs.Parse
 
--- https://primes.utm.edu/lists/2small/0bit.html
-type F = LA.Mod 9223372036854775783 LA.Z
+-- 2^31-1 https://primes.utm.edu/lists/2small/0bit.html
+type F = LA.Mod 0x7fffffff LA.Z
 
--- A random 63-bit prime.
+-- A random 31-bit prime. This has to be so that `quotRem` for `Int64` works
+-- correctly.
 edgeValue :: F
-edgeValue = 6876016341580807721
+edgeValue = 2481945953
 
--- An exponent of a random 63-bit prime.
+-- An exponent of a random 31-bit prime.
 colorHash :: Int -> F
 colorHash 0 = 1
-colorHash c = 3164292571999483261 ^ c
+colorHash c = 7884612553 ^ c
 
 -- | Converts a list of neighbours to a vector that maps indices to one of two
 -- values depending on the presence of an edge.
