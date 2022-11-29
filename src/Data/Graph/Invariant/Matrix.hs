@@ -8,7 +8,6 @@ module Data.Graph.Invariant.Matrix
 
 import           Data.Array                     ( bounds )
 import           Data.Foldable                  ( toList )
-import qualified Data.HashMap.Strict           as HM
 import           Data.Semigroup                 ( stimesMonoid )
 import qualified Numeric.LinearAlgebra         as LA
 
@@ -32,12 +31,7 @@ colorHash c = 7884612553 ^ c
 invariantBase :: ColoredGraph -> LA.Matrix F
 invariantBase (ColoredGraph g cs) =
   LA.assoc (n, n) 0
-    $
-    -- Default, uncolored vertices.
-       [ ((i, i), colorHash 0) | i <- [0 .. (n - 1)] ]
-    -- Explicitly colored vertices.
-    ++ [ ((i, i), colorHash c) | (v, c) <- HM.toList cs, let i = v - mn ]
-    -- Edges.
+    $  [ ((i, i), colorHash c) | (i, c) <- zip [0 ..] (toList cs) ]
     ++ [ ((i, u - mn), edgeValue) | (i, es) <- zip [0 ..] (toList g), u <- es ]
  where
   (mn, mx) = bounds g

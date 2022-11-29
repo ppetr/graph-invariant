@@ -6,16 +6,16 @@ module Data.Graph.Dimacs.Parse
   ) where
 
 import           Control.Applicative
-import           Data.Array                     ( bounds )
+import           Data.Array
 import           Data.Attoparsec.Text
 import           Data.Foldable                  ( concatMap )
 import           Data.Graph
-import qualified Data.HashMap.Strict           as HM
 import qualified Data.HashSet                  as HS
 
 data ColoredGraph = ColoredGraph
   { cgGraph  :: Graph
-  , cgColors :: HM.HashMap Vertex Int
+  , cgColors :: Array Vertex Int
+  -- ^ Has the same bounds as the `Graph`.
   }
   deriving (Eq, Ord, Show, Read)
 
@@ -23,8 +23,9 @@ parseColored :: Parser ColoredGraph
 parseColored = do
   _                  <- many comment
   (n'nodes, n'edges) <- problem
-  cs                 <- HM.fromList <$> many (color n'nodes)
-  g                  <- buildG (1, n'nodes) <$> count n'edges (edge n'nodes)
+  let bs = (1, n'nodes)
+  cs <- accumArray (\_ x -> x) 0 bs <$> many (color n'nodes)
+  g  <- buildG bs <$> count n'edges (edge n'nodes)
   return $ ColoredGraph g cs
  where
   space' = skipMany1 (skip isHorizontalSpace)
