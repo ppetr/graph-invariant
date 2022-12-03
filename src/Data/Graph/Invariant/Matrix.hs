@@ -4,10 +4,17 @@ module Data.Graph.Invariant.Matrix
   , invariantBase
   , invariantMatrix
   , invariant
+  , iterateInvariant
+  , iterateInvariant'
   ) where
 
-import           Data.Array                     ( bounds )
+import           Data.Array                     ( (//)
+                                                , bounds
+                                                )
 import           Data.Foldable                  ( toList )
+import           Data.List                      ( find
+                                                , sort
+                                                )
 import           Data.Semigroup                 ( stimesMonoid )
 import qualified Numeric.LinearAlgebra         as LA
 
@@ -37,13 +44,47 @@ invariantBase (ColoredGraph g cs) =
   (mn, mx) = bounds g
   n        = mx - mn + 1
 
--- | The base invariant matrix raied to the power equal to the number of vertices.
+-- | The base invariant matrix raised to the power equal to the number of vertices.
 invariantMatrix :: ColoredGraph -> LA.Matrix F
-invariantMatrix g = stimesMonoid
-  (let (mn, mx) = bounds $ cgGraph g in mx - mn + 1)
-  (invariantBase g)
+invariantMatrix g =
+  let (mn, mx) = bounds $ cgGraph g
+  -- The exponent is twice the number of vertices: In one step a color
+  -- propagates through an edge, and only in the next step it is multiplied by
+  -- the vertex's color.
+  in  stimesMonoid (2 * (mx - mn + 1)) (invariantBase g)
 
 -- | Computes the invariant of a graph as a vector of 1s multiplied by its
 -- 'invariantMatrix`.
 invariant :: ColoredGraph -> F
 invariant = sum . map LA.sumElements . LA.toRows . invariantMatrix
+
+-- | Returns the index of the smallest element that appears in the list more than once.
+findSmallestIndex :: (Ord a) => [a] -> Maybe Int
+findSmallestIndex [] = Nothing
+findSmallestIndex xs =
+  let vs = sort $ zip xs [0 ..]
+  in  (\((_, i), _) -> i)
+        <$> find (\((x, _), (y, _)) -> x == y) (zip vs (tail vs))
+
+-- | If there are vertices that can't be distinguished, let's assume there
+-- exists an automorphism that maps one to another. Let's pick one from the
+-- group of more than 1 elements with the smallest color, change its color and
+-- run it through the whole procedure.
+iterateInvariant
+  :: (ColoredGraph -> LA.Vector F) -> ColoredGraph -> LA.Vector F
+iterateInvariant inv_f = loop [2 ..]
+ where
+  loop (d : ds) g@(ColoredGraph g' cs)
+    | Just i <- findSmallestIndex (LA.toList u) = loop
+      ds
+      (ColoredGraph g' (cs // [(i + mn, d)]))
+    | otherwise = u
+   where
+    (mn, _) = bounds g'
+    u       = inv_f g
+  loop [] _ = error "Should never happen"
+
+
+iterateInvariant' :: ColoredGraph -> F
+iterateInvariant' = LA.sumElements . iterateInvariant f
+  where f g = LA.konst 1 (cgSize g) LA.<# invariantMatrix g

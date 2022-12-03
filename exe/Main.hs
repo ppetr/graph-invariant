@@ -20,4 +20,4 @@ main = do
   putStrLn
     . printf "%s,%#010x" filename
     . (fromIntegral :: F -> Word64)
-    $ invariant uGraph
+    $ iterateInvariant' uGraph

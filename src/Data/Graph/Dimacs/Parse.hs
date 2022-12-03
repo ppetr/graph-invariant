@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Data.Graph.Dimacs.Parse
   ( ColoredGraph(..)
+  , cgSize
   , parseColored
   , undirected
   ) where
@@ -18,6 +19,9 @@ data ColoredGraph = ColoredGraph
   -- ^ Has the same bounds as the `Graph`.
   }
   deriving (Eq, Ord, Show, Read)
+
+cgSize :: ColoredGraph -> Int
+cgSize (ColoredGraph g _) = let (mn, mx) = bounds g in mx - mn + 1
 
 parseColored :: Parser ColoredGraph
 parseColored = do
