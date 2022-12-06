@@ -23,6 +23,8 @@ data ColoredGraph = ColoredGraph
 cgSize :: ColoredGraph -> Int
 cgSize (ColoredGraph g _) = let (mn, mx) = bounds g in mx - mn + 1
 
+-- | Parses the _bliss_ (DIMACS textual graph file format) described in
+-- http://www.tcs.hut.fi/Software/bliss/fileformat.shtml.
 parseColored :: Parser ColoredGraph
 parseColored = do
   _                  <- many comment
