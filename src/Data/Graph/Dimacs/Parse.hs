@@ -13,15 +13,7 @@ import           Data.Foldable                  ( concatMap )
 import           Data.Graph
 import qualified Data.HashSet                  as HS
 
-data ColoredGraph = ColoredGraph
-  { cgGraph  :: Graph
-  , cgColors :: Array Vertex Int
-  -- ^ Has the same bounds as the `Graph`.
-  }
-  deriving (Eq, Ord, Show, Read)
-
-cgSize :: ColoredGraph -> Int
-cgSize (ColoredGraph g _) = let (mn, mx) = bounds g in mx - mn + 1
+import           Data.Graph.Invariant.Types
 
 -- | Parses the _bliss_ (DIMACS textual graph file format) described in
 -- http://www.tcs.hut.fi/Software/bliss/fileformat.shtml.

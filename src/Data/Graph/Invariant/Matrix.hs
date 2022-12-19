@@ -3,6 +3,7 @@ module Data.Graph.Invariant.Matrix
   ( F
   , invariantBase
   , invariantMatrix
+  , invariantMatrixF
   , invariant
   , iterateInvariant
   , iterateInvariant'
@@ -19,9 +20,7 @@ import           Data.Semigroup                 ( stimesMonoid )
 import qualified Numeric.LinearAlgebra         as LA
 
 import           Data.Graph.Dimacs.Parse
-
--- 2^31-1 https://primes.utm.edu/lists/2small/0bit.html
-type F = LA.Mod 0x7fffffff LA.Z
+import           Data.Graph.Invariant.Types
 
 -- An exponent of a random 31-bit prime.
 colorHash :: Int -> F
@@ -50,6 +49,9 @@ invariantMatrix g =
   -- propagates through an edge, and only in the next step it is multiplied by
   -- the vertex's color.
   stimesMonoid (2 * cgSize g) (invariantBase g)
+
+invariantMatrixF :: ColoredGraph -> LA.Vector F -> LA.Vector F
+invariantMatrixF g = (LA.<# invariantMatrix g)
 
 -- | Computes the invariant of a graph as a vector of 1s multiplied by its
 -- 'invariantMatrix`.
