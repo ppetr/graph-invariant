@@ -100,6 +100,7 @@ sortV v = do
   v' <- VS.thaw v
   V.sort v'
   VS.unsafeFreeze v'
+{-# INLINE sortV #-}
 
 data Algebra = Algebra Int
                        (forall s . Vector F -> InvariantMonad s (Vector F))
@@ -119,20 +120,21 @@ findSmallest2Group :: (Ord a) => [a] -> Maybe (a, IS.IntSet)
 findSmallest2Group =
   F.find (\(_, js) -> IS.size js >= 2) . groupsBySize . (`zip` [0 ..])
 
-hashColoring :: Int -> Vector F -> Int
-hashColoring s = hashWithSalt s . map (fromIntegral :: F -> Z) . toList
+newtype HashedVector = HashedVector (Vector F)
+  deriving (Eq, Ord, Show)
+
+instance Hashable HashedVector where
+  hashWithSalt s (HashedVector v) =
+    hashWithSalt s . map (fromIntegral :: F -> Z) . VS.toList $ v
 
 -- | `SortedColoring` represents one particular way how to color a structure.
 -- Reaching the same coloring in two different ways is a witness of an
 -- isomorphism.
-newtype SortedColoring = SortedColoring (Vector F)
-  deriving (Eq, Ord, Show)
-
-instance Hashable SortedColoring where
-  hashWithSalt s (SortedColoring v) = hashColoring s v
+newtype SortedColoring = SortedColoring (Hashed HashedVector)
+  deriving (Eq, Ord, Show, Hashable)
 
 coloring :: Vector F -> SortedColoring
-coloring v = SortedColoring (runST (sortV v))
+coloring v = SortedColoring (hashed . HashedVector $ runST (sortV v))
 
 data Orbit = Orbit (Vector F) Int [Vector Int]
   deriving (Eq, Ord, Show)
@@ -172,13 +174,12 @@ iterateInvariant (Algebra _ f _) s v = runInvariantM ((,) <$> f v <*> twist) s
 updateIndex :: Int -> F -> Vector F -> Vector F
 updateIndex w x v = accum v const [(w, x)]
 
-anyColoring
-  :: Algebra -> Seed -> Vector F -> (Vector F, [Hashed SortedColoring])
+anyColoring :: Algebra -> Seed -> Vector F -> (Vector F, [SortedColoring])
 anyColoring a = loop []
  where
   loop cs s v =
     let ((v', twist'i), s') = iterateInvariant a s v
-        cs'                 = hashed (coloring v') : cs
+        cs'                 = coloring v' : cs
     in  case findSmallest2Group (toList v') of
           Just (i, ws) | (w : _) <- IS.toList ws ->
             loop cs' s' (updateIndex w (twist'i i) v')
@@ -187,15 +188,15 @@ anyColoring a = loop []
 matchColoring
   :: (MonadPlus m)
   => Algebra
-  -> (Hashed SortedColoring -> m Bool)
+  -> (SortedColoring -> m Bool)
   -> Seed
   -> Vector F
-  -> m (Vector F, Hashed SortedColoring)
+  -> m (Vector F, SortedColoring)
 matchColoring a f'c = loop
  where
   loop s v = do
     let ((v', twist'i), s') = iterateInvariant a s v
-        c                   = hashed (coloring v')
+        c                   = coloring v'
     guard =<< f'c c
     case findSmallest2Group (toList v') of
       Nothing -> return (v', c)
@@ -209,7 +210,7 @@ canonicalColoringStep a@(Algebra n _ f'iso) s v = runST $ do
   let ((v', twist'i), s') = iterateInvariant a s v
   case findSmallest2Group (toList v') of
     Nothing      -> return (v', s')
-    Just (i, ws) -> runST $ do
+    Just (i, ws) -> do
       let i' = twist'i i
       eq  <- V.replicateM n (E.newElement mempty)
       cs  <- HT.new
@@ -234,7 +235,7 @@ canonicalColoringStep a@(Algebra n _ f'iso) s v = runST $ do
                   )
                 $ do -- No match, this is a new class.
                     let (u, cs') = anyColoring a s' v''
-                        c        = hashed $ coloring u
+                        c        = coloring u
                     traceEvent "Computed new coloring" $ return ()
                     let e = eq V.! w
                     E.set (First $ Just (c, u, [])) e
