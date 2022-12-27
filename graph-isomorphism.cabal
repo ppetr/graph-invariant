@@ -15,6 +15,7 @@ extra-source-files:  README.md
 
 library
   exposed-modules:     Data.Graph.Dimacs.Parse,
+                       Data.Graph.Invariant.Algebra,
                        Data.Graph.Invariant.Equivalence,
                        Data.Graph.Invariant.Matrix
                        Data.Graph.Invariant.Perfect
@@ -25,12 +26,14 @@ library
                        array,
                        attoparsec,
                        containers,
+                       hashable,
+                       hashtables,
                        hmatrix >= 0.17,
+                       logict,
                        mtl,
                        mwc-random,
                        text,
                        transformers,
-                       unordered-containers,
                        vector,
                        vector-algorithms
   ghc-options:         -Wall
