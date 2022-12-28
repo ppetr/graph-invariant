@@ -205,6 +205,9 @@ matchColoring a f'c = loop
         in  msum . map (\w -> loop s' (updateIndex w i' v')) $ IS.toList ws
 {-# INLINE matchColoring #-}
 
+data EqSet = EqSet SortedColoring Int (Vector F) [Vector Int]
+  deriving (Eq, Ord, Show)
+
 canonicalColoringStep :: Algebra -> Seed -> Vector F -> (Vector F, Seed)
 canonicalColoringStep a@(Algebra n _ f'iso) s v = runST $ do
   let ((v', twist'i), s') = iterateInvariant a s v
@@ -217,33 +220,33 @@ canonicalColoringStep a@(Algebra n _ f'iso) s v = runST $ do
       c2e <- HT.new
       forM_ (IS.toList ws) $ \w -> E.find (eq V.! w) >>= \case
         First (Just _) -> traceEvent "Found equivalent coloring" $ return ()
-        _ ->
+        _              -> do
           let v'' = updateIndex w i' v'
-          in  runLogicT
-                  (matchColoring a (fmap isJust . lift . HT.lookup cs) s' v'')
-                  (\(z, c) cont -> do
-                    e'                       <- fromJust <$> HT.lookup c2e c
-                    First (Just (c', u, ps)) <- E.find e'
-                    assert (c == c') $ return ()
-                    let p = permutation u z
-                    if f'iso p
-                      then do
-                        traceEvent "Found coloring for index" $ return ()
-                        E.set (First (Just (c', u, p : ps))) e'
-                        mergePermutationImage eq p
-                      else traceEvent "Coloring failed isomorphism check" cont
-                  )
-                $ do -- No match, this is a new class.
-                    let (u, cs') = anyColoring a s' v''
-                        c        = coloring u
-                    traceEvent "Computed new coloring" $ return ()
-                    let e = eq V.! w
-                    E.set (First $ Just (c, u, [])) e
-                    HT.insert c2e c e
-                    forM_ cs' (\d -> HT.insert cs d ())
+          runLogicT
+              (matchColoring a (fmap isJust . lift . HT.lookup cs) s' v'')
+              (\(z, c) cont -> do
+                e'                              <- fromJust <$> HT.lookup c2e c
+                First (Just (EqSet c' w' u ps)) <- E.find e'
+                assert (c == c') $ return ()
+                let p = permutation u z
+                if f'iso p
+                  then do
+                    traceEvent "Found coloring for index" $ return ()
+                    E.set (First (Just (EqSet c' w' u (p : ps)))) e'
+                    mergePermutationImage eq p
+                  else traceEvent "Coloring failed isomorphism check" cont
+              )
+            $ do -- No match, this is a new class.
+                let (u, cs') = anyColoring a s' v''
+                    c        = coloring u
+                traceEvent "Computed new coloring" $ return ()
+                let e = eq V.! w
+                E.set (First (Just $ EqSet c w u [])) e
+                HT.insert c2e c e
+                forM_ cs' (\d -> HT.insert cs d ())
       -- Now we have computed all classes. Find the smallest one and compute it.
       gs <- fmap (map snd . groupsBySize) . forM (IS.toList ws) $ \w -> do
-        First (Just (c, _, _)) <- E.find (eq V.! w)
+        First (Just (EqSet c _ _ _)) <- E.find (eq V.! w)
         return (c, w)
       -- It can still be that we have more classes that have the same minimum size.
       -- Then we have to compute all of them and take the sorted minimum as the
@@ -253,6 +256,8 @@ canonicalColoringStep a@(Algebra n _ f'iso) s v = runST $ do
           is       = takeWhile (\g -> IS.size g == min_size) gs <&> \g ->
             let w0  = IS.findMin g
                 v'' = updateIndex w0 i' v'
+                -- TODO: Re-use equivalence classes from each run in the
+                -- following ones.
                 i's = canonicalColoringStep a s' v''
             in  (coloring (fst i's), w0, i's)
       let (_, _, i'r) = F.minimum is
