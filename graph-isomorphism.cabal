@@ -17,13 +17,15 @@ library
   exposed-modules:     Data.Graph.Dimacs.Parse,
                        Data.Graph.Invariant.Algebra,
                        Data.Graph.Invariant.Equivalence,
-                       Data.Graph.Invariant.Matrix
-                       Data.Graph.Invariant.Perfect
-                       Data.Graph.Invariant.Types
+                       Data.Graph.Invariant.Matrix,
+                       Data.Graph.Invariant.Output,
+                       Data.Graph.Invariant.Perfect,
+                       Data.Graph.Invariant.Types,
                        Data.Graph.Invariant.Util
   hs-source-dirs:      src
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5,
+                       aeson,
                        array,
                        attoparsec,
                        containers,

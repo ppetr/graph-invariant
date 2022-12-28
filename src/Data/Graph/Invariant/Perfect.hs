@@ -7,7 +7,6 @@ module Data.Graph.Invariant.Perfect
   ( InvariantMonad
   , pseudoRandom
   , Algebra(..)
-  , Orbit(..)
   , canonicalColoring
   ) where
 
@@ -135,9 +134,6 @@ newtype SortedColoring = SortedColoring (Hashed HashedVector)
 
 coloring :: Vector F -> SortedColoring
 coloring v = SortedColoring (hashed . HashedVector $ runST (sortV v))
-
-data Orbit = Orbit (Vector F) Int [Vector Int]
-  deriving (Eq, Ord, Show)
 
 permutation :: Vector F -> Vector F -> Vector Int
 permutation u v = VS.create $ do
