@@ -7,15 +7,12 @@ module Data.Graph.Dimacs.Parse
   ) where
 
 import           Control.Applicative
-import           Control.Monad.ST
 import           Data.Array
 import           Data.Attoparsec.Text
-import           Data.Foldable
 import           Data.Graph
-import qualified Data.HashTable.ST.Basic       as HT
-import           Data.Hashable                  ( Hashable(..) )
 
 import           Data.Graph.Invariant.Types
+import           Data.Graph.Invariant.Util
 
 -- | Parses the _bliss_ (DIMACS textual graph file format) described in
 -- http://www.tcs.hut.fi/Software/bliss/fileformat.shtml.
@@ -46,14 +43,6 @@ parseColored = do
     (,)
       <$> (char 'e' *> space' *> vertex n)
       <*> (space' *> vertex n <* endOfLine)
-
--- | Returns unique elements of a collection in arbitrary order,
-hashNub :: (Foldable t, Eq a, Hashable a) => t a -> [a]
-hashNub xs = runST $ do
-  ht <- HT.new
-  forM_ xs $ \x -> HT.insert ht x ()
-  HT.foldM (\xs (x, ~()) -> return (x : xs)) [] ht
-{-# INLINE hashNub #-}
 
 undirected :: Graph -> Graph
 undirected g = buildG (bounds g) (hashNub . concatMap edge $ edges g)
