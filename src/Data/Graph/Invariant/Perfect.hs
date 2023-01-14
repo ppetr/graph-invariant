@@ -29,7 +29,9 @@ import           Data.Hashable                  ( Hashable(..)
 import qualified Data.IntSet                   as IS
 import           Data.List                      ( sortBy )
 import qualified Data.Map                      as M
-import           Data.Maybe                     ( fromJust )
+import           Data.Maybe                     ( fromJust
+                                                , mapMaybe
+                                                )
 import           Data.Monoid
 import           Data.Tuple                     ( swap )
 import qualified Data.Vector                   as V
@@ -189,15 +191,17 @@ updateIndices
 updateIndices f v ws = accum v f (map (\(j, x) -> (j, fromIntegral x)) ws)
 {-# INLINE updateIndices #-}
 
--- | Given a new coloring and a set of permutations, searches whether the
--- coloring is an isomorphism of one of the `[Orbit]` results. If yes,
--- adds it to this permutations. If not, adds a new `Orbit` based on the
--- coloring.
-addResult
-  :: (Vector Int -> Bool) -> Orbit -> Vector F -> Maybe (Orbit, Vector Int)
-addResult is_iso (Orbit u ps) v
-  | r <- permutation u v, is_iso r = Just (Orbit u (r : ps), r)
-  | otherwise                      = Nothing
+addToResult
+  :: (Vector Int -> Bool)
+  -> Orbit
+  -> [Vector F]
+  -> Vector F
+  -> (Orbit, [Vector F], Maybe (Vector Int))
+addToResult is_iso o@(Orbit u ps) vs v
+  | (r : _) <- mapMaybe (mfilter is_iso . Just . (`permutation` v)) (u : vs)
+  = (Orbit u (r : ps), vs, Just r)
+  | otherwise
+  = (o, v : vs, Nothing)
 
 data LeastChain = Unknown | Result Orbit [Vector F] | ColoringStep SortedColoring LeastChain
 
@@ -249,11 +253,8 @@ canonicalColoringStep a@(Algebra n f f'iso) v seed = do
       Nothing -> do
         chain <- get
         let (chain', m'p) = case chain of
-              Result o vs
-                | Just (o', p) <- addResult f'iso o v' -> (Result o' vs, Just p)
-                |
-                          -- TODO: Check permutations of vs -> v'
-                  otherwise -> (Result o (v' : vs), Nothing)
+              Result o vs | (o', vs', m'p') <- addToResult f'iso o vs v' ->
+                (Result o' vs', m'p')
               _ -> (Result (Orbit v' []) [], Nothing)
         put chain'
         case m'p of
