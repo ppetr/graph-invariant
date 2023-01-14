@@ -170,7 +170,7 @@ permutation u v = VS.create $ do
   {-# INLINE orderIndices #-}
 
 mergePermutationImage
-  :: (Eq c, Semigroup c) => V.Vector (E.Element s c) -> Vector Int -> ST s ()
+  :: (Semigroup c) => V.Vector (E.Element s c) -> Vector Int -> ST s ()
 mergePermutationImage es =
   VG.imapM_ $ \j k -> when (j /= k) (void $ E.union (<>) (es V.! j) (es V.! k))
 {-# INLINE mergePermutationImage #-}

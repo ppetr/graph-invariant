@@ -56,28 +56,22 @@ same :: (Eq c) => Element s c -> Element s c -> ST s Bool
 same i j = (==) <$> find i <*> find j
 
 union
-  :: (Eq c) => (c -> c -> c) -> Element s c -> Element s c -> ST s (Maybe c)
-union f = union' (\x y -> if x == y then Nothing else Just (f x y))
-
-union'
-  :: (c -> c -> Maybe c)
-  -- ^ Function that compares the classes of the two elements. If it returns
-  -- `Nothing`, elements are considered equal. Otherwise its `Just` result will
-  -- be the class of the merged sets.
+  :: (c -> c -> c) -- ^ A function to combine the two elements. Should be idempotent.
   -> Element s c
   -> Element s c
-  -> ST s (Maybe c)
-union' f x y = do
+  -> ST s c
+union f x y = do
   (i, r, c) <- find' x
   (j, s, d) <- find' y
-  let m'cd = f c d
-  case m'cd of
-    Nothing -> return ()
-    Just cd -> case compare r s of
-      LT -> writeSTRef i (Node j) >> writeSTRef j (Repr s cd)
-      GT -> writeSTRef j (Node i) >> writeSTRef i (Repr r cd)
-      EQ -> writeSTRef i (Node j) >> writeSTRef j (Repr (s + 1) cd)
-  return m'cd
+  if i == j
+    then return c
+    else do
+      let cd = f c d
+      case compare r s of
+        LT -> writeSTRef i (Node j) >> writeSTRef j (Repr s cd)
+        GT -> writeSTRef j (Node i) >> writeSTRef i (Repr r cd)
+        EQ -> writeSTRef i (Node j) >> writeSTRef j (Repr (s + 1) cd)
+      return cd
 
 set :: c -> Element s c -> ST s ()
 set d = modify (const d)
