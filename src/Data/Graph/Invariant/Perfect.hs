@@ -259,8 +259,10 @@ canonicalColoringStep v seed = do
               $ canonicalColoringStep (updateIndex w i' v') seed'
             liftST $ E.set (Any True) (eq V.! w)
             case m'eq' of
-              Just eq' -> liftST $ VG.zipWithM_ (E.union const) eq eq'
-              Nothing  -> return ()
+              Just eq' -> liftST $ do
+                VG.forM_ eq' $ E.set mempty
+                VG.zipWithM_ (E.union (<>)) eq eq'
+              Nothing -> return ()
     return eq
 {-# INLINE canonicalColoringStep #-}
 
