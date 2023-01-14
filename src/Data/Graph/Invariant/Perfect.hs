@@ -12,11 +12,18 @@ module Data.Graph.Invariant.Perfect
 
 import           Control.Applicative
 import           Control.Exception              ( assert )
-import           Control.Monad.Reader
+import           Control.Monad
+import           Control.Monad.Reader           ( ReaderT(..) )
+import           Control.Monad.Reader.Class
 import           Control.Monad.ST
 import           Control.Monad.ST.Class
-import           Control.Monad.State
+import           Control.Monad.State.Class
+import           Control.Monad.Trans.Class      ( lift )
 import           Control.Monad.Trans.Maybe
+import           Control.Monad.Trans.RWS.Strict ( RWST(..)
+                                                , execRWST
+                                                )
+import           Control.Monad.Writer.Class
 import qualified Data.Foldable                 as F
 import           Data.Function                  ( on )
 import qualified Data.Graph.Invariant.Equivalence
@@ -28,11 +35,15 @@ import           Data.Hashable                  ( Hashable(..)
                                                 )
 import qualified Data.IntSet                   as IS
 import           Data.List                      ( sortBy )
+import qualified Data.List.NonEmpty            as NE
 import qualified Data.Map                      as M
 import           Data.Maybe                     ( fromJust
                                                 , mapMaybe
                                                 )
 import           Data.Monoid
+import           Data.Sequence                  ( Seq(..)
+                                                , singleton
+                                                )
 import           Data.Tuple                     ( swap )
 import qualified Data.Vector                   as V
 import qualified Data.Vector.Algorithms.Intro  as V
@@ -162,17 +173,6 @@ composeP :: (VS.Storable a) => Vector a -> Vector Int -> Vector a
 composeP p = VG.map (p VS.!)
 {-# INLINE composeP #-}
 
-data Orbit = Orbit (Vector F) [Vector Int]
-  deriving (Eq, Ord, Show)
-
--- | The permutation that maps the vector of the
--- 1st argument to the vector of the 2nd is
--- intentionally the head of the permutation list
--- of the result so that it can be easily accessed.
-instance Semigroup Orbit where
-  (Orbit v qs) <> (Orbit u ps) =
-    let r = permutation u v in Orbit u ([r] ++ map (`composeP` r) qs ++ ps)
-
 mergePermutationImage
   :: (Eq c, Semigroup c) => V.Vector (E.Element s c) -> Vector Int -> ST s ()
 mergePermutationImage es =
@@ -193,21 +193,21 @@ updateIndices f v ws = accum v f (map (\(j, x) -> (j, fromIntegral x)) ws)
 
 addToResult
   :: (Vector Int -> Bool)
-  -> Orbit
-  -> [Vector F]
+  -> NE.NonEmpty (Vector F)
   -> Vector F
-  -> (Orbit, [Vector F], Maybe (Vector Int))
-addToResult is_iso o@(Orbit u ps) vs v
-  | (r : _) <- mapMaybe (mfilter is_iso . Just . (`permutation` v)) (u : vs)
-  = (Orbit u (r : ps), vs, Just r)
+  -> (NE.NonEmpty (Vector F), Maybe (Vector Int))
+addToResult is_iso vs v
+  | (r : _) <- mapMaybe (mfilter is_iso . Just . (`permutation` v))
+                        (F.toList vs)
+  = (vs, Just r)
   | otherwise
-  = (o, v : vs, Nothing)
+  = (v NE.<| vs, Nothing)
 
-data LeastChain = Unknown | Result Orbit [Vector F] | ColoringStep SortedColoring LeastChain
+data LeastChain = Unknown | Result (NE.NonEmpty (Vector F)) | ColoringStep SortedColoring LeastChain
 
-chainResult :: LeastChain -> Maybe (Orbit, [Vector F])
+chainResult :: LeastChain -> Maybe (NE.NonEmpty (Vector F))
 chainResult Unknown                = Nothing
-chainResult (Result       o vs   ) = Just (o, vs)
+chainResult (Result vs           ) = Just vs
 chainResult (ColoringStep _ chain) = chainResult chain
 
 descend
@@ -226,154 +226,60 @@ descend c k = do
   return x
 {-# INLINE descend #-}
 
-data EqSet = EqSet
-  { canonicalInvariant :: Maybe (Vector F)
-  , permutations       :: Maybe Orbit
-  }
-  deriving (Eq, Ord, Show)
-
-instance Semigroup EqSet where
-  (EqSet u ps) <> (EqSet v qs) =
-    EqSet (getFirst (First u <> First v)) (ps <> qs)
-
 -- | Extracts a value in an `Alternative`.
 extractAlt :: (Alternative m) => m a -> m (Maybe a)
 extractAlt k = (Just <$> k) <|> pure Nothing
+{-# INLINE extractAlt #-}
 
 canonicalColoringStep
-  :: Algebra
-  -> Vector F
+  :: Vector F
   -> Seed
-  -> StateT LeastChain (MaybeT (ST s)) (V.Vector (E.Element s Any))
-canonicalColoringStep a@(Algebra n f f'iso) v seed = do
+  -> MaybeT
+       (RWST Algebra (Seq (Vector Int)) LeastChain (ST s))
+       (V.Vector (E.Element s Any))
+canonicalColoringStep v seed = do
+  (Algebra n f f'iso) <- ask
   let ((v', twist'i), seed') = runInvariantM ((,) <$> f v <*> twist) seed
   descend (coloring v') $ do
     eq <- liftST $ V.replicateM n (E.newElement mempty)
     case findSmallest2Group (toList v') of
       Nothing -> do
         chain <- get
-        let (chain', m'p) = case chain of
-              Result o vs | (o', vs', m'p') <- addToResult f'iso o vs v' ->
-                (Result o' vs', m'p')
-              _ -> (Result (Orbit v' []) [], Nothing)
-        put chain'
-        case m'p of
-          Just p  -> liftST $ mergePermutationImage eq p
-          Nothing -> return ()
+        case chain of
+          Result vs | (vs', m'p) <- addToResult f'iso vs v' -> do
+            put (Result vs')
+            case m'p of
+              Just p -> do
+                tell (singleton p)
+                liftST $ mergePermutationImage eq p
+              Nothing -> return ()
+          _ -> put (Result (v' NE.:| []))
       Just (i, ws) -> do
         let i' = twist'i i
         forM_ (IS.toList ws) $ \w -> do
           (Any done) <- liftST $ E.find (eq V.! w)
           unless done $ do
             m'eq' <- extractAlt
-              $ canonicalColoringStep a (updateIndex w i' v') seed'
+              $ canonicalColoringStep (updateIndex w i' v') seed'
             liftST $ E.set (Any True) (eq V.! w)
             case m'eq' of
               Just eq' -> liftST $ VG.zipWithM_ (E.union const) eq eq'
               Nothing  -> return ()
     return eq
-
-{-
-
-canonicalColoringStep
-  :: Algebra
-  -> Seed
-  -> LeastChain
-  -> Vector F
-  -> MaybeT (ST s) (Vector F, V.Vector (E.Element EqSet), Seed)
-canonicalColoringStep = undefined
-canonicalColoringStep a@(Algebra n f f'iso) s least v = do
-  let ((v', twist'i, twist'g), s') =
-        runInvariantM ((,,) <$> f v <*> twist <*> twist2) s
-      v'color = coloring v'
-  case least of
-    Result       _ _     -> empty
-    ColoringStep c chain -> undefined
-  eq <- V.replicateM n (E.newElement $ EqSet IS.empty Nothing Nothing)
-  case findSmallest2Group (toList v') of
-    Nothing      -> return (v', eq, s')
-    Just (i, ws) -> do
-      let i' = twist'i i
-      cs  <- HT.new
-      c2e <- HT.new
-      forM_ (IS.toList ws) $ \w -> E.find (eq V.! w) >>= \case
-        EqSet { permutations = Just _ } ->
-          traceEvent "Found equivalent coloring" $ return ()
-        _ -> do
-          let v'' = updateIndex w i' v'
-          runLogicT
-              (do
-                let f'c = fmap isJust . lift . HT.lookup cs
-                (z, c) <- matchColoring a f'c s' v''
-                e'     <- msum . map return . fromMaybe [] =<< lift
-                  (HT.lookup c2e c)
-                eqs@EqSet { permutations = ps } <- lift (E.find e')
-                let qs@(Orbit _ (q : _)) =
-                      Orbit z [] <> fromJust ps
-                guard $ f'iso q
-                traceEvent "Found coloring for index" $ return ()
-                E.set eqs e'
-                mergePermutationImage eq q
-              )
-              (\_ _ -> return ())
-            $ do -- No match, so this is a new class.
-                let (u, cs') = anyColoring a s' v''
-                    c        = coloring u
-                traceEvent "Computed new coloring" $ return ()
-                let e = eq V.! w
-                E.set
-                  (EqSet (IS.singleton w) Nothing (Just (Orbit u [])))
-                  e
-                HT.mutate c2e c (\es' -> (Just (e : fromMaybe [] es'), ()))
-                forM_ cs' (\d -> HT.insert cs d ())
-      -- Now we have computed all classes.
-      -- Mark elements according their class's sizes. We can't distinguish
-      -- classes of the same size, since there is no way of assigning an invariant
-      -- value to each of them at this stage.
-      v'' <- updateIndices twist'g v' <$> forM
-        (IS.toList ws)
-        (\w ->
-          (\EqSet { indices = js } -> (w, IS.size js)) <$> E.find (eq V.! w)
-        )
-      -- Find the smallest classes and compute their invariants.
-      undefined
-      {-
-      gs <- fmap (map snd . groupsBySize) . forM (IS.toList ws) $ \w -> do
-        First (Just (EqSet c _ _ _ _)) <- E.find (eq V.! w)
-        return (c, w)
-      -- It can still be that we have more classes that have the same minimum size.
-      -- Then we have to compute all of them and take the sorted minimum as the
-      -- invariant, since we don't have another coordinate-independent way how
-      -- to tell them apart.
-      let min_size = IS.size (head gs)
-      (_, i0, seed0) <-
-        F.minimum
-        <$> forM_ (takeWhile (\g -> IS.size g == min_size) gs)
-        $   \g -> do
-              let w0  = IS.findMin g
-                  v'' = updateIndex w0 i' v'
-              First (Just e@(EqSet _ _ _ m'i _)) <- E.find (eq V.! w0)
-              case m'i of
-                Just i'c -> return i'c
-                Nothing  -> do
-                  (i, eq', _) <- canonicalColoringStep a s' v''
-                  E.set (First (Just e { eqsCanonicalInvariant = Just i }))
-                        (eq V.! w0)
-                  VG.zipWithM_ (E.union const) (eq, eq')
-                  return (coloring i, i)
-      -- TODO: Emit the orbits.
-      traceEvent "Return invariants" $ return (i0, eq, seed0)
-      -}
--}
+{-# INLINE canonicalColoringStep #-}
 
 totalInvariant :: Seed -> Vector F -> F
 totalInvariant s is = VS.sum . fst $ runInvariantM (sortAndTwistV is) s
 
-canonicalColoring :: (forall s . InvariantMonad s Algebra) -> (F, Vector F)
+canonicalColoring
+  :: (forall s . InvariantMonad s Algebra) -> (F, NE.NonEmpty (Vector F))
 canonicalColoring k =
-  let (a@(   Algebra n _ _), seed0) = runInvariantM k initialSeed
-      (Orbit is           _, _    ) = fromJust . chainResult . fromJust $ runST
-        (runMaybeT
-          (execStateT (canonicalColoringStep a (konst 1 n) seed0) Unknown)
-        )
-  in  (totalInvariant seed0 is, is)
+  let (a@(Algebra n _ _), seed0) = runInvariantM k initialSeed
+      (chain, _) =
+        runST
+          (execRWST (runMaybeT (canonicalColoringStep (konst 1 n) seed0))
+                    a
+                    Unknown
+          )
+      is@(i NE.:| _) = fromJust (chainResult chain)
+  in  (totalInvariant seed0 i, is)
