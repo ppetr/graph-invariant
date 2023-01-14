@@ -7,7 +7,6 @@ module Data.Graph.Invariant.Equivalence
   , same
   , set
   , union
-  , union'
   ) where
 
 import           Control.Monad.ST
@@ -56,29 +55,29 @@ find' (Element i0) = readSTRef i0 >>= loop i0
 same :: (Eq c) => Element s c -> Element s c -> ST s Bool
 same i j = (==) <$> find i <*> find j
 
-union :: (Eq c) => (c -> c -> c) -> Element s c -> Element s c -> ST s c
-union f = union' (\x y -> return (if x == y then Nothing else Just (f x y)))
+union
+  :: (Eq c) => (c -> c -> c) -> Element s c -> Element s c -> ST s (Maybe c)
+union f = union' (\x y -> if x == y then Nothing else Just (f x y))
 
 union'
-  :: (c -> c -> ST s (Maybe c))
+  :: (c -> c -> Maybe c)
   -- ^ Function that compares the classes of the two elements. If it returns
   -- `Nothing`, elements are considered equal. Otherwise its `Just` result will
   -- be the class of the merged sets.
   -> Element s c
   -> Element s c
-  -> ST s c
+  -> ST s (Maybe c)
 union' f x y = do
   (i, r, c) <- find' x
   (j, s, d) <- find' y
-  m'cd      <- f c d
+  let m'cd = f c d
   case m'cd of
-    Nothing -> return c
-    Just cd -> do
-      case compare r s of
-        LT -> writeSTRef i (Node j) >> writeSTRef j (Repr s cd)
-        GT -> writeSTRef j (Node i) >> writeSTRef i (Repr r cd)
-        EQ -> writeSTRef i (Node j) >> writeSTRef j (Repr (s + 1) cd)
-      return cd
+    Nothing -> return ()
+    Just cd -> case compare r s of
+      LT -> writeSTRef i (Node j) >> writeSTRef j (Repr s cd)
+      GT -> writeSTRef j (Node i) >> writeSTRef i (Repr r cd)
+      EQ -> writeSTRef i (Node j) >> writeSTRef j (Repr (s + 1) cd)
+  return m'cd
 
 set :: c -> Element s c -> ST s ()
 set d = modify (const d)

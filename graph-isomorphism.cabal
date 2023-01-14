@@ -33,6 +33,7 @@ library
                        hashtables,
                        hmatrix >= 0.17,
                        logict,
+                       monad-st,
                        mtl,
                        mwc-random,
                        text,
