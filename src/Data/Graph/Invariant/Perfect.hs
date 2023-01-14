@@ -169,10 +169,6 @@ permutation u v = VS.create $ do
     return ix
   {-# INLINE orderIndices #-}
 
-composeP :: (VS.Storable a) => Vector a -> Vector Int -> Vector a
-composeP p = VG.map (p VS.!)
-{-# INLINE composeP #-}
-
 mergePermutationImage
   :: (Eq c, Semigroup c) => V.Vector (E.Element s c) -> Vector Int -> ST s ()
 mergePermutationImage es =
@@ -272,14 +268,15 @@ totalInvariant :: Seed -> Vector F -> F
 totalInvariant s is = VS.sum . fst $ runInvariantM (sortAndTwistV is) s
 
 canonicalColoring
-  :: (forall s . InvariantMonad s Algebra) -> (F, NE.NonEmpty (Vector F))
+  :: (forall s . InvariantMonad s Algebra)
+  -> (F, NE.NonEmpty (Vector F), Seq (Vector Int))
 canonicalColoring k =
   let (a@(Algebra n _ _), seed0) = runInvariantM k initialSeed
-      (chain, _) =
+      (chain, ps) =
         runST
           (execRWST (runMaybeT (canonicalColoringStep (konst 1 n) seed0))
                     a
                     Unknown
           )
       is@(i NE.:| _) = fromJust (chainResult chain)
-  in  (totalInvariant seed0 i, is)
+  in  (fromIntegral (NE.length is) * totalInvariant seed0 i, is, ps)

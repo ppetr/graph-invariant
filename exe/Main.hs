@@ -1,17 +1,21 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main
   ( main
   ) where
 
+import           Data.Aeson.Encode.Pretty
 import           Data.Attoparsec.Text           ( parseOnly )
+import qualified Data.ByteString.Lazy.Char8    as BS
+import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
-import           Data.Word                      ( Word64 )
+import qualified Data.Vector.Generic           as VG
+                                                ( map )
 import           System.Environment             ( getArgs )
-import           Text.Printf
 
 import           Data.Graph.Dimacs.Parse
 import           Data.Graph.Invariant.Algebra
+import           Data.Graph.Invariant.Output
 import           Data.Graph.Invariant.Perfect
-import           Data.Graph.Invariant.Types
 
 main :: IO ()
 main = do
@@ -19,5 +23,11 @@ main = do
   t          <- T.readFile filename
   let Right dGraph = parseOnly parseColored t
       uGraph       = dGraph { cgGraph = undirected (cgGraph dGraph) }
-      (i, _)       = canonicalColoring (return $ graphAlgebra uGraph)
-  putStrLn . printf "%s,%#010x" filename . (fromIntegral :: F -> Word64) $ i
+      (i, is, ps)  = canonicalColoring (return $ graphAlgebra uGraph)
+  BS.putStrLn . encodePretty $ GraphInvariant
+    { name                  = Just (T.pack filename)
+    , invariantVersion      = "TODO"
+    , invariant             = fromIntegral i
+    , elementInvariants     = fmap (VG.map fromIntegral) is
+    , isomorphismGenerators = ps
+    }
