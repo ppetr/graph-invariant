@@ -199,7 +199,10 @@ addToResult is_iso vs v
   | otherwise
   = (v NE.<| vs, Nothing)
 
-data LeastChain = Unknown | Result (NE.NonEmpty (Vector F)) | ColoringStep SortedColoring LeastChain
+data LeastChain
+  = Unknown
+  | Result (NE.NonEmpty (Vector F))
+  | ColoringStep SortedColoring LeastChain
 
 chainResult :: LeastChain -> Maybe (NE.NonEmpty (Vector F))
 chainResult Unknown                = Nothing
