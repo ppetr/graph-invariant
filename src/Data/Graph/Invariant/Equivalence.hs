@@ -56,6 +56,8 @@ find' (Element i0) = readSTRef i0 >>= loop i0
 same :: Element s c -> Element s c -> ST s Bool
 same i j = (on (==) (\(k, _, _) -> k)) <$> find' i <*> find' j
 
+-- | If the two elements are different sets, joins them using a given function
+-- and returns the result. Otherwise just returns `Nothing`.
 union
   :: (c -> c -> c) -- ^ A function to combine the two elements. Should be idempotent.
   -> Element s c
@@ -64,7 +66,7 @@ union
 union f x y = do
   (i, r, c) <- find' x
   (j, s, d) <- find' y
-  if i == j
+  if i == j  -- STRef pointer equality.
     then return Nothing
     else do
       let cd = f c d
