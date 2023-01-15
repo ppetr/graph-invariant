@@ -1,4 +1,4 @@
-{-# LANGUAGE DataKinds, FlexibleContexts, GeneralizedNewtypeDeriving, RankNTypes, TypeFamilies #-}
+{-# LANGUAGE DataKinds, FlexibleContexts, GeneralizedNewtypeDeriving, LambdaCase, RankNTypes, TypeFamilies #-}
 {-
  TODO:
  * Use Vector/Bundle instead converting to a list where appropriate.
@@ -40,7 +40,7 @@ import qualified Data.Map                      as M
 import           Data.Maybe                     ( fromJust
                                                 , mapMaybe
                                                 )
-import           Data.Monoid
+import           Data.STRef
 import           Data.Sequence                  ( Seq(..)
                                                 , singleton
                                                 )
@@ -206,64 +206,54 @@ chainResult Unknown                = Nothing
 chainResult (Result vs           ) = Just vs
 chainResult (ColoringStep _ chain) = chainResult chain
 
-descend
-  :: (MonadState LeastChain m, MonadPlus m) => SortedColoring -> m a -> m a
-descend c k = do
-  chain <- get
-  case chain of
+descend :: (MonadState LeastChain m) => SortedColoring -> m () -> m ()
+descend c k = void . runMaybeT $ do
+  get >>= \case
     Result{}               -> empty
     ColoringStep c' chain' -> case compare c' c of
       LT -> empty
       EQ -> put chain'
       GT -> put Unknown  -- discard the current chain
     Unknown -> put Unknown
-  x <- k
+  x <- lift k
   modify (ColoringStep c)
   return x
 {-# INLINE descend #-}
 
--- | Extracts a value in an `Alternative`.
-extractAlt :: (Alternative m) => m a -> m (Maybe a)
-extractAlt k = (Just <$> k) <|> pure Nothing
-{-# INLINE extractAlt #-}
-
 canonicalColoringStep
   :: Vector F
   -> Seed
-  -> MaybeT
-       (RWST Algebra (Seq (Vector Int)) LeastChain (ST s))
-       (V.Vector (E.Element s Any))
+  -> RWST
+       (Algebra, V.Vector (E.Element s IS.IntSet))
+       (Seq (Vector Int))
+       LeastChain
+       (ST s)
+       ()
 canonicalColoringStep v seed = do
-  (Algebra n f f'iso) <- ask
+  (Algebra _ f f'iso, eq) <- ask
   let ((v', twist'i), seed') = runInvariantM ((,) <$> f v <*> twist) seed
-  descend (coloring v') $ do
-    eq <- liftST $ V.replicateM n (E.newElement mempty)
-    case findSmallest2Group (toList v') of
-      Nothing -> do
-        chain <- get
-        case chain of
-          Result vs | (vs', m'p) <- addToResult f'iso vs v' -> do
-            put (Result vs')
-            case m'p of
-              Just p -> do
-                tell (singleton p)
-                liftST $ mergePermutationImage eq p
-              Nothing -> return ()
-          _ -> put (Result (v' NE.:| []))
-      Just (i, ws) -> do
-        let i' = twist'i i
-        forM_ (IS.toList ws) $ \w -> do
-          (Any done) <- liftST $ E.find (eq V.! w)
-          unless done $ do
-            m'eq' <- extractAlt
-              $ canonicalColoringStep (updateIndex w i' v') seed'
-            liftST $ E.set (Any True) (eq V.! w)
-            case m'eq' of
-              Just eq' -> liftST $ do
-                VG.forM_ eq' $ E.set mempty
-                VG.zipWithM_ (E.union (<>)) eq eq'
-              Nothing -> return ()
-    return eq
+  descend (coloring v') $ case findSmallest2Group (toList v') of
+    Nothing -> get >>= \case
+      Result vs -> do
+        let (vs', m'p) = addToResult f'iso vs v'
+        put (Result vs')
+        case m'p of
+          Just p -> do
+            tell (singleton p)
+            liftST $ mergePermutationImage eq p
+          Nothing -> return ()
+      _ -> put (Result (v' NE.:| []))
+    Just (i, ws) -> do
+      let i' = twist'i i
+      visited <- liftST $ newSTRef IS.empty
+      forM_ (IS.toList ws) $ \w -> do
+        unprocessed <- liftST $ do
+          vs    <- readSTRef visited
+          w_set <- IS.intersection ws <$> E.find (eq V.! w)
+          let vs' = vs `IS.union` w_set
+          writeSTRef visited vs'
+          return (IS.size w_set + IS.size vs == IS.size vs')
+        when unprocessed $ canonicalColoringStep (updateIndex w i' v') seed'
 {-# INLINE canonicalColoringStep #-}
 
 totalInvariant :: Seed -> Vector F -> F
@@ -274,11 +264,8 @@ canonicalColoring
   -> (F, NE.NonEmpty (Vector F), Seq (Vector Int))
 canonicalColoring k =
   let (a@(Algebra n _ _), seed0) = runInvariantM k initialSeed
-      (chain, ps) =
-        runST
-          (execRWST (runMaybeT (canonicalColoringStep (konst 1 n) seed0))
-                    a
-                    Unknown
-          )
+      (chain            , ps   ) = runST $ do
+        eq <- V.generateM n (E.newElement . IS.singleton)
+        execRWST (canonicalColoringStep (konst 1 n) seed0) (a, eq) Unknown
       is@(i NE.:| _) = fromJust (chainResult chain)
   in  (fromIntegral (NE.length is) * totalInvariant seed0 i, is, ps)

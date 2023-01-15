@@ -10,6 +10,7 @@ module Data.Graph.Invariant.Equivalence
   ) where
 
 import           Control.Monad.ST
+import           Data.Function                  ( on )
 import           Data.STRef
 import           Data.Word                      ( Word8 )
 
@@ -52,26 +53,26 @@ find' (Element i0) = readSTRef i0 >>= loop i0
       _      -> return ()
     loop p o
 
-same :: (Eq c) => Element s c -> Element s c -> ST s Bool
-same i j = (==) <$> find i <*> find j
+same :: Element s c -> Element s c -> ST s Bool
+same i j = (on (==) (\(k, _, _) -> k)) <$> find' i <*> find' j
 
 union
   :: (c -> c -> c) -- ^ A function to combine the two elements. Should be idempotent.
   -> Element s c
   -> Element s c
-  -> ST s c
+  -> ST s (Maybe c)
 union f x y = do
   (i, r, c) <- find' x
   (j, s, d) <- find' y
   if i == j
-    then return c
+    then return Nothing
     else do
       let cd = f c d
       case compare r s of
         LT -> writeSTRef i (Node j) >> writeSTRef j (Repr s cd)
         GT -> writeSTRef j (Node i) >> writeSTRef i (Repr r cd)
         EQ -> writeSTRef i (Node j) >> writeSTRef j (Repr (s + 1) cd)
-      return cd
+      return (Just cd)
 
 set :: c -> Element s c -> ST s ()
 set d = modify (const d)
