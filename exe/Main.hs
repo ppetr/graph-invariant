@@ -6,12 +6,12 @@ module Main
 import           Control.Exception              ( evaluate )
 import           Data.Aeson.Encode.Pretty
 import           Data.Attoparsec.Text           ( parseOnly )
-import qualified Data.ByteString.Lazy.Char8    as BS
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
 import qualified Data.Vector.Generic           as VG
                                                 ( map )
 import           Data.Word                      ( Word64 )
+import           System.AtomicWrite.Writer.LazyByteString
 import           System.Environment             ( getArgs )
 import           System.Exit
 import           System.IO                      ( hPutStrLn
@@ -36,7 +36,7 @@ main = do
       (i, is, ps) = canonicalColoring (return $ graphAlgebra uGraph)
   _ <- evaluate i
   putStrLn . printf "%s,%#010x" in_file . (fromIntegral :: F -> Word64) $ i
-  BS.writeFile out_file . encodePretty $ GraphInvariant
+  atomicWriteFile out_file . encodePretty $ GraphInvariant
     { name                  = Just (T.pack in_file)
     , invariantVersion      = "TODO"
     , invariant             = fromIntegral i
