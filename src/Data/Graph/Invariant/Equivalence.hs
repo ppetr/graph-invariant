@@ -54,7 +54,7 @@ find' (Element i0) = readSTRef i0 >>= loop i0
     loop p o
 
 same :: Element s c -> Element s c -> ST s Bool
-same i j = (on (==) (\(k, _, _) -> k)) <$> find' i <*> find' j
+same i j = on (==) (\(k, _, _) -> k) <$> find' i <*> find' j
 
 -- | If the two elements are different sets, joins them using a given function
 -- and returns the result. Otherwise just returns `Nothing`.

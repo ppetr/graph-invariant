@@ -20,6 +20,7 @@ library
                        Data.Graph.Invariant.Matrix,
                        Data.Graph.Invariant.Output,
                        Data.Graph.Invariant.Perfect,
+                       Data.Graph.Invariant.RunStats,
                        Data.Graph.Invariant.Types,
                        Data.Graph.Invariant.Util
   hs-source-dirs:      src
@@ -28,6 +29,7 @@ library
                        aeson,
                        array,
                        attoparsec,
+                       bytestring,
                        containers,
                        hashable,
                        hashtables,
@@ -38,6 +40,7 @@ library
                        mwc-random,
                        text,
                        transformers,
+                       unix,
                        vector,
                        vector-algorithms
   ghc-options:         -Wall
