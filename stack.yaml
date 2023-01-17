@@ -45,8 +45,8 @@ packages:
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 extra-deps:
-# - STMonadTrans-0.4.6
-# - equivalence-0.4.1
+- writer-cps-mtl-0.1.1.6
+- writer-cps-transformers-0.5.5.0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

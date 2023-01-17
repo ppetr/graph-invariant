@@ -13,6 +13,9 @@ module Data.Graph.Invariant.Perfect
 import           Control.Applicative
 import           Control.Exception              ( assert )
 import           Control.Monad
+import           Control.Monad.RWS.CPS          ( RWST
+                                                , execRWST
+                                                )
 import           Control.Monad.Reader           ( ReaderT(..) )
 import           Control.Monad.Reader.Class
 import           Control.Monad.ST
@@ -20,9 +23,6 @@ import           Control.Monad.ST.Class
 import           Control.Monad.State.Class
 import           Control.Monad.Trans.Class      ( lift )
 import           Control.Monad.Trans.Maybe
-import           Control.Monad.Trans.RWS.Strict ( RWST(..)
-                                                , execRWST
-                                                )
 import           Control.Monad.Writer.Class
 import qualified Data.Foldable                 as F
 import           Data.Function                  ( on )
@@ -72,7 +72,7 @@ import qualified System.Random.MWC             as MWC
 newtype InvariantMonad s a = InvariantMonad (ReaderT (MWC.GenST s) (ST s) a)
   deriving (Functor, Applicative, Monad)
 
-data Seed = Seed MWC.Seed (VU.Vector Word32)
+data Seed = Seed !MWC.Seed !(VU.Vector Word32)
 
 instance Eq Seed where
   (Seed s1 _) == (Seed s2 _) = s1 == s2
@@ -201,8 +201,8 @@ addToResult is_iso vs v
 
 data LeastChain
   = Unknown
-  | Result (NE.NonEmpty (Vector F))
-  | ColoringStep SortedColoring LeastChain
+  | Result !(NE.NonEmpty (Vector F))
+  | ColoringStep !SortedColoring !LeastChain
 
 chainResult :: LeastChain -> Maybe (NE.NonEmpty (Vector F))
 chainResult Unknown                = Nothing
