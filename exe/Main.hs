@@ -24,6 +24,7 @@ import           Data.Aeson.Encode.Pretty
 import           Data.Attoparsec.Text           ( parseOnly )
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
+import qualified Data.Text.Lazy.IO             as TL
 import qualified Data.Vector.Generic           as VG
                                                 ( map )
 import           Data.Word                      ( Word64 )
@@ -38,6 +39,7 @@ import           Text.Printf
 
 import           Data.Graph.Dimacs.Parse
 import           Data.Graph.Invariant.Algebra
+import           Data.Graph.Invariant.Gap
 import           Data.Graph.Invariant.Output
 import           Data.Graph.Invariant.Perfect
 import           Data.Graph.Invariant.RunStats
@@ -60,10 +62,12 @@ main = do
     Right dGraph' -> return dGraph'
   let uGraph      = dGraph { cgGraph = undirected (cgGraph dGraph) }
       (i, is, ps) = canonicalColoring (return $ graphAlgebra uGraph)
-  _ <- evaluate i
+  _     <- evaluate i
+  stats <- getRunStats
 
   putStrLn . printf "%s,%#010x" in_file . (fromIntegral :: F -> Word64) $ i
-  stats <- getRunStats
+  -- TL.putStrLn $ automToGap ps
+
   atomicWriteFile out_file . encodePretty $ GraphInvariant
     { name                  = Just (T.pack in_file)
     , invariantVersion      = "TODO"
