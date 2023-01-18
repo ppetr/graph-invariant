@@ -39,6 +39,7 @@ data GraphInvariant = GraphInvariant
   , invariant             :: LA.Z
   , elementInvariants     :: NonEmpty (VS.Vector LA.Z)
   , isomorphismGenerators :: Seq (VS.Vector Int)
+  -- ^ 1-based permutations that generate the isomorphism group.
   , runStats              :: Maybe RunStats
   }
   deriving (Eq, Ord, Show, Generic)

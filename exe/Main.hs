@@ -69,6 +69,6 @@ main = do
     , invariantVersion      = "TODO"
     , invariant             = fromIntegral i
     , elementInvariants     = fmap (VG.map fromIntegral) is
-    , isomorphismGenerators = ps
+    , isomorphismGenerators = fmap (VG.map (+ 1)) ps
     , runStats              = stats
     }
