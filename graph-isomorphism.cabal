@@ -78,6 +78,7 @@ executable graph-isomorphism
                        aeson-pretty,
                        atomic-write,
                        bytestring,
+                       cmdargs,
                        graph-isomorphism,
                        attoparsec,
                        text,
