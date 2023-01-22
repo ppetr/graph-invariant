@@ -100,7 +100,8 @@ main = do
     Nothing -> return ()
   case output main_args of
     Just f -> BSL.atomicWriteFile f . encodePretty $ GraphInvariant
-      { name                  = Just (T.pack $ input main_args)
+      { name                  = Just
+                                  $ if T.null comment then T.pack $ input main_args else comment
       , invariantVersion      = "TODO"
       , invariant             = fromIntegral i
       , elementInvariants     = fmap (VG.map fromIntegral) is

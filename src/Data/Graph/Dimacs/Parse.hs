@@ -21,8 +21,9 @@ module Data.Graph.Dimacs.Parse
 
 import           Control.Applicative
 import           Data.Array
-import           Data.Attoparsec.Text
+import           Data.Attoparsec.Text          as A
 import           Data.Graph
+import qualified Data.Text                     as T
 
 import           Data.Graph.Invariant.Types
 import           Data.Graph.Invariant.Util
@@ -31,18 +32,18 @@ import           Data.Graph.Invariant.Util
 -- http://www.tcs.hut.fi/Software/bliss/fileformat.shtml.
 parseColored :: Parser ColoredGraph
 parseColored = do
-  _                  <- many comment
+  txt                <- many comment
   (n'nodes, n'edges) <- problem
   let bs = (1, n'nodes)
   cs <- accumArray (\_ x -> x) 0 bs <$> many (color n'nodes)
   g  <- buildG bs <$> count n'edges (edge n'nodes)
-  return $ ColoredGraph g cs
+  return $ ColoredGraph g cs (T.strip $ T.unlines txt)
  where
   space' = skipMany1 (skip isHorizontalSpace)
   vertex n = decimal >>= \v -> if (v < 1) || (v > n)
     then fail "Vertex number out of bounds"
     else return v
-  comment = char 'c' *> skipWhile (not . isEndOfLine) *> endOfLine
+  comment = char 'c' *> A.takeWhile (not . isEndOfLine) <* endOfLine
   -- Returns the number of vertices and the number of edges.
   problem =
     (,)

@@ -43,7 +43,7 @@ colorHash c = 7884612553 ^ c
 -- | Constructs a base invariant matrix as a sum of the incidence matrix and a
 -- diagonal matrix of colors.
 invariantBase :: ColoredGraph -> LA.Matrix F
-invariantBase (ColoredGraph g cs) =
+invariantBase (ColoredGraph g cs _) =
   LA.assoc (n, n) 0
     $  [ ((i, i), colorHash c) | (i, c) <- zip [0 ..] (toList cs) ]
     ++ [ ((i, u - mn), edgeValue) | (i, es) <- zip [0 ..] (toList g), u <- es ]
@@ -74,7 +74,7 @@ invariant = sum . map LA.sumElements . LA.toRows . invariantMatrix
 -- | Constructs a base invariant matrix of dimension '2n' as a sum of the
 -- incidence matrix and a diagonal matrix of colors.
 invariantBase2 :: ColoredGraph -> LA.Matrix F
-invariantBase2 (ColoredGraph g cs) =
+invariantBase2 (ColoredGraph g cs _) =
   LA.assoc (2 * n, 2 * n) 0
     $  [ (x, colorHash c)
        | (i, c) <- zip [0, 2 ..] (toList cs)
@@ -132,10 +132,10 @@ iterateInvariant
   :: (ColoredGraph -> LA.Vector F) -> ColoredGraph -> LA.Vector F
 iterateInvariant inv_f = loop [2 ..]
  where
-  loop (d : ds) g@(ColoredGraph g' cs)
+  loop (d : ds) g@(ColoredGraph g' cs txt)
     | Just i <- findSmallestIndex (LA.toList u) = loop
       ds
-      (ColoredGraph g' (cs // [(i + mn, d)]))
+      (ColoredGraph g' (cs // [(i + mn, d)]) txt)
     | otherwise = u
    where
     (mn, _) = bounds g'

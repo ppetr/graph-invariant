@@ -22,6 +22,7 @@ module Data.Graph.Invariant.Types
 import           Data.Array
 import           Data.Graph
 import           Data.Proxy
+import           Data.Text                      ( Text )
 import           GHC.TypeLits
 import qualified Numeric.LinearAlgebra         as LA
 
@@ -35,11 +36,12 @@ maxBoundF = x - 1
   x = fromIntegral $ natVal (Proxy :: Proxy m)
 
 data ColoredGraph = ColoredGraph
-  { cgGraph  :: Graph
-  , cgColors :: Array Vertex Int
+  { cgGraph   :: Graph
+  , cgColors  :: Array Vertex Int
   -- ^ Has the same bounds as the `Graph`.
+  , cgComment :: Text
   }
   deriving (Eq, Ord, Show, Read)
 
 cgSize :: ColoredGraph -> Int
-cgSize (ColoredGraph g _) = let (mn, mx) = bounds g in mx - mn + 1
+cgSize ColoredGraph { cgGraph = g } = let (mn, mx) = bounds g in mx - mn + 1
