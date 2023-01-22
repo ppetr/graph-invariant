@@ -48,6 +48,6 @@ graphAlgebra g = Algebra (cgSize g)
   iso :: VS.Vector Int -> All
   iso p = ifoldMap'
     (\j pj ->
-      All (f'c j == f'c pj) <> All (es V.! j == IS.map (p VS.!) (es V.! pj))
+      All (f'c j == f'c pj) <> All (IS.map (p VS.!) (es V.! j) == (es V.! pj))
     )
     p
