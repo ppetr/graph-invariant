@@ -22,24 +22,34 @@ import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.Text
 import qualified Data.Vector.Storable          as VS
 
-listPerm :: VS.Vector Int -> Doc ann
-listPerm =
-  ("PermList" <>)
-    . nest 2
-    . parens
-    . brackets
-    . fillSep
-    . punctuate ","
-    . map (pretty . (+ 1))
-    . VS.toList
+import           Data.Graph.Invariant.Output
 
-automToGap :: (Foldable f) => f (VS.Vector Int) -> Text
+listPerm :: Permutation -> Doc ann
+listPerm (Permutation cs)
+  | null cs
+  = "()"
+  | otherwise
+  = cat
+    . map (parens . fillSep . punctuate "," . map pretty . VS.toList)
+    . toList
+    $ cs
+
+automToGap :: (Foldable f) => f Permutation -> Text
 automToGap ps = renderLazy . layoutSmart defaultLayoutOptions $ vsep
   [ "# Read this file with ReadAsFunction."
   , "return Group" <> nest
     2
     (  (parens . brackets)
-        (line <> (align . vsep . punctuate "," . map listPerm . toList $ ps))
+        (  line
+        <> ( align
+           . fillSep
+           . punctuate ","
+           . map listPerm
+           . (Permutation mempty :)
+           . toList
+           $ ps
+           )
+        )
     <> ";"
     )
   ]

@@ -11,9 +11,10 @@
 -- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric, FlexibleContexts #-}
 module Data.Graph.Invariant.Output
   ( GraphInvariant(..)
+  , Permutation(..)
   , RunStats(..)
   ) where
 
@@ -33,12 +34,18 @@ newtype RunStats = RunStats
 instance ToJSON RunStats where
   toEncoding = genericToEncoding defaultOptions
 
+newtype Permutation = Permutation { cycles :: Seq (VS.Vector Int) }
+  deriving (Eq, Ord, Show, Generic)
+
+instance ToJSON Permutation where
+  toEncoding = genericToEncoding defaultOptions
+
 data GraphInvariant = GraphInvariant
   { name                  :: Maybe Text
   , invariantVersion      :: Text
   , invariant             :: LA.Z
   , elementInvariants     :: NonEmpty (VS.Vector LA.Z)
-  , isomorphismGenerators :: Seq (VS.Vector Int)
+  , isomorphismGenerators :: Seq Permutation
   -- ^ 1-based permutations that generate the isomorphism group.
   , runStats              :: Maybe RunStats
   }

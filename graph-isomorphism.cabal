@@ -33,6 +33,7 @@ library
                        Data.Graph.Invariant.Matrix,
                        Data.Graph.Invariant.Output,
                        Data.Graph.Invariant.Perfect,
+                       Data.Graph.Invariant.Permutation,
                        Data.Graph.Invariant.RunStats,
                        Data.Graph.Invariant.Types,
                        Data.Graph.Invariant.Util

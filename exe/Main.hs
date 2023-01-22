@@ -44,6 +44,7 @@ import           Data.Graph.Invariant.Algebra
 import           Data.Graph.Invariant.Gap
 import           Data.Graph.Invariant.Output
 import           Data.Graph.Invariant.Perfect
+import           Data.Graph.Invariant.Permutation
 import           Data.Graph.Invariant.RunStats
 import           Data.Graph.Invariant.Types     ( F )
 
@@ -85,9 +86,10 @@ main :: IO ()
 main = do
   main_args <- cmdArgs annotatedArgs
   t         <- T.readFile (input main_args)
-  dGraph    <- case parseOnly parseColored t of
-    Left  err     -> hPutStrLn stderr err >> exitWith (ExitFailure 1)
-    Right dGraph' -> return dGraph'
+  dGraph@ColoredGraph { cgComment = comment } <-
+    case parseOnly parseColored t of
+      Left  err     -> hPutStrLn stderr err >> exitWith (ExitFailure 1)
+      Right dGraph' -> return dGraph'
   let uGraph      = dGraph { cgGraph = undirected (cgGraph dGraph) }
       (i, is, ps) = canonicalColoring (return $ graphAlgebra uGraph)
   _     <- evaluate i
@@ -95,8 +97,9 @@ main = do
 
   putStrLn . printf "%#010x" . (fromIntegral :: F -> Word64) $ i
 
+  let gs = fmap (Permutation . asCycles) ps
   case gap_output main_args of
-    Just f  -> TL.atomicWriteFile f $ automToGap ps
+    Just f  -> TL.atomicWriteFile f $ automToGap gs
     Nothing -> return ()
   case output main_args of
     Just f -> BSL.atomicWriteFile f . encodePretty $ GraphInvariant
@@ -105,7 +108,7 @@ main = do
       , invariantVersion      = "TODO"
       , invariant             = fromIntegral i
       , elementInvariants     = fmap (VG.map fromIntegral) is
-      , isomorphismGenerators = fmap (VG.map (+ 1)) ps
+      , isomorphismGenerators = gs
       , runStats              = stats
       }
     Nothing -> return ()
