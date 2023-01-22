@@ -29,20 +29,22 @@ listPerm (Permutation cs)
   | null cs
   = "()"
   | otherwise
-  = cat
-    . map (parens . fillSep . punctuate "," . map pretty . VS.toList)
+  = nest 2
+    . group
+    . fillCat
+    . map (parens . fillCat . punctuate "," . map pretty . VS.toList)
     . toList
     $ cs
 
 automToGap :: (Foldable f) => f Permutation -> Text
-automToGap ps = renderLazy . layoutSmart defaultLayoutOptions $ vsep
+automToGap ps = renderLazy . layoutSmart defaultLayoutOptions . group $ vsep
   [ "# Read this file with ReadAsFunction."
   , "return Group" <> nest
     2
     (  (parens . brackets)
         (  line
-        <> ( align
-           . fillSep
+        <> ( group
+           . vsep
            . punctuate ","
            . map listPerm
            . (Permutation mempty :)
