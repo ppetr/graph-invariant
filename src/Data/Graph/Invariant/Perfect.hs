@@ -278,10 +278,13 @@ totalInvariant s is = VS.sum . fst $ runInvariantM (sortAndTwistV is) s
 canonicalColoring
   :: (forall s . InvariantMonad s Algebra)
   -> (F, NE.NonEmpty (Vector F), Seq (Vector Int))
-canonicalColoring k =
-  let (a@(Algebra n _ _), seed0) = runInvariantM k initialSeed
-      (chain            , ps   ) = runST $ do
-        eq <- V.generateM n (E.newElement . IS.singleton)
-        execRWST (canonicalColoringStep (konst 1 n) seed0) (a, eq) Unknown
-      is@(i NE.:| _) = fromJust (chainResult chain)
-  in  (fromIntegral (NE.length is) * totalInvariant seed0 i, is, ps)
+canonicalColoring k
+  | (a@(Algebra n _ _), seed0) <- runInvariantM k initialSeed
+  , n > 0
+  = let (chain, ps) = runST $ do
+          eq <- V.generateM n (E.newElement . IS.singleton)
+          execRWST (canonicalColoringStep (konst 1 n) seed0) (a, eq) Unknown
+        is@(i NE.:| _) = fromJust (chainResult chain)
+    in  (fromIntegral (NE.length is) * totalInvariant seed0 i, is, ps)
+  | otherwise
+  = (0, VS.empty NE.:| [], mempty)
