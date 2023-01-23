@@ -42,6 +42,7 @@ instance ToJSON Permutation where
 
 data GraphInvariant = GraphInvariant
   { name                  :: Maybe Text
+  , isDirected            :: Bool
   , invariantVersion      :: Text
   , invariant             :: LA.Z
   , elementInvariants     :: NonEmpty (VS.Vector LA.Z)

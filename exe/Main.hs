@@ -52,6 +52,7 @@ data Args = Args
   { input      :: String
   , output     :: Maybe String
   , gap_output :: Maybe String
+  , directed   :: Bool
   }
   deriving (Show, Data, Typeable)
 
@@ -77,6 +78,7 @@ annotatedArgs =
         &= typ "OUTFILE"
         &= help
              "Output file path where to write the automorphism group in the GAP format (optional)"
+      , directed   = False &= help "Treat the input as a directed graph"
       }
     &= program "graph-invariant"
     &= summary
@@ -90,8 +92,9 @@ main = do
     case parseOnly parseColored t of
       Left  err     -> hPutStrLn stderr err >> exitWith (ExitFailure 1)
       Right dGraph' -> return dGraph'
-  let uGraph      = dGraph { cgGraph = undirected (cgGraph dGraph) }
-      (i, is, ps) = canonicalColoring (return $ graphAlgebra uGraph)
+  let graph | directed main_args = dGraph
+            | otherwise = dGraph { cgGraph = undirected (cgGraph dGraph) }
+      (i, is, ps) = canonicalColoring (return $ graphAlgebra graph)
   _     <- evaluate i
   stats <- getRunStats
 
@@ -105,6 +108,7 @@ main = do
     Just f -> BSL.atomicWriteFile f . encodePretty $ GraphInvariant
       { name                  = Just
                                   $ if T.null comment then T.pack $ input main_args else comment
+      , isDirected            = directed main_args
       , invariantVersion      = "TODO"
       , invariant             = fromIntegral i
       , elementInvariants     = fmap (VG.map fromIntegral) is
