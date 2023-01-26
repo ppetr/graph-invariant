@@ -24,9 +24,7 @@ import           Data.Sequence                  ( Seq(..)
 import qualified Data.Vector.Fusion.Bundle     as VB
 import qualified Data.Vector.Generic           as VG
 import qualified Data.Vector.Generic.Mutable   as VG
-                                                ( unsafeExchange
-                                                , unsafeWrite
-                                                )
+                                                ( unsafeExchange )
 import qualified Data.Vector.Storable          as VS
 
 asCycles :: VS.Vector Int -> Seq (VS.Vector Int)
