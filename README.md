@@ -47,3 +47,7 @@ the program computes several properties of the input graph:
 
 Please see [Code of Conduct](docs/code-of-conduct.md) and
 [Contributing](docs/contributing.md).
+
+- Use [accelerate](https://hackage.haskell.org/package/accelerate) do perform
+  matrix multiplications on a GPU. This could speed up the algorithm
+  considerably.
