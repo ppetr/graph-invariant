@@ -11,7 +11,7 @@
 -- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
-{-# LANGUAGE DataKinds, FlexibleContexts, GeneralizedNewtypeDeriving, LambdaCase, RankNTypes, TypeFamilies #-}
+{-# LANGUAGE DataKinds, FlexibleContexts, GeneralizedNewtypeDeriving, RankNTypes, TypeFamilies #-}
 {-
  TODO:
  * Use Vector/Bundle instead converting to a list where appropriate.
@@ -23,20 +23,18 @@ module Data.Graph.Invariant.Perfect
   , canonicalColoring
   ) where
 
-import           Control.Applicative
+import           Control.Arrow                  ( second )
 import           Control.Exception              ( assert )
 import           Control.Monad
-import           Control.Monad.RWS.CPS          ( RWST
-                                                , execRWST
-                                                )
+import           Control.Monad.Coroutine
+import           Control.Monad.Coroutine.SuspensionFunctors
+                                                ( Yield(..) )
+import           Control.Monad.Logic
 import           Control.Monad.Reader           ( ReaderT(..) )
 import           Control.Monad.Reader.Class
 import           Control.Monad.ST
 import           Control.Monad.ST.Class
-import           Control.Monad.State.Class
 import           Control.Monad.Trans.Class      ( lift )
-import           Control.Monad.Trans.Maybe
-import           Control.Monad.Writer.Class
 import qualified Data.Foldable                 as F
 import           Data.Function                  ( on )
 import qualified Data.Graph.Invariant.Equivalence
@@ -54,15 +52,14 @@ import           Data.Maybe                     ( fromJust
                                                 , mapMaybe
                                                 )
 import           Data.STRef
-import           Data.Sequence                  ( Seq(..)
-                                                , singleton
+import           Data.Sequence                  ( Seq
+                                                , (|>)
                                                 )
 import           Data.Tuple                     ( swap )
 import qualified Data.Vector                   as V
 import qualified Data.Vector.Algorithms.Intro  as V
 import qualified Data.Vector.Fusion.Bundle.Monadic
                                                as VB
-import qualified Data.Vector.Generic           as VG
 import qualified Data.Vector.Generic.Mutable   as VM
                                                 ( unsafeNew
                                                 , unsafeWrite
@@ -182,14 +179,9 @@ permutation u v = VS.create $ do
     return ix
   {-# INLINE orderIndices #-}
 
-mergePermutationImage
-  :: (Semigroup c) => V.Vector (E.Element s c) -> Vector Int -> ST s ()
-mergePermutationImage es =
-  VG.imapM_ $ \j k -> when (j /= k) (void $ E.union (<>) (es V.! j) (es V.! k))
-{-# INLINE mergePermutationImage #-}
-
 updateIndex :: Int -> F -> Vector F -> Vector F
 updateIndex w x v = updateIndices const v [(w, x)]
+{-# INLINE updateIndex #-}
 
 updateIndices
   :: (Integral a)
@@ -212,65 +204,105 @@ addToResult is_iso vs v
   | otherwise
   = (v NE.<| vs, Nothing)
 
-data LeastChain
-  = Unknown
-  | Result !(NE.NonEmpty (Vector F))
-  | ColoringStep !SortedColoring !LeastChain
+coroutineZero :: (MonadPlus m) => Coroutine s m a
+coroutineZero = Coroutine mzero
 
-chainResult :: LeastChain -> Maybe (NE.NonEmpty (Vector F))
-chainResult Unknown                = Nothing
-chainResult (Result vs           ) = Just vs
-chainResult (ColoringStep _ chain) = chainResult chain
+coroutinePlus
+  :: (MonadPlus m) => Coroutine s m a -> Coroutine s m a -> Coroutine s m a
+coroutinePlus x y = Coroutine (resume x `mplus` resume y)
 
-descend :: (MonadState LeastChain m) => SortedColoring -> m () -> m ()
-descend c k = void . runMaybeT $ do
-  get >>= \case
-    Result{}               -> empty
-    ColoringStep c' chain' -> case compare c' c of
-      LT -> empty
-      EQ -> put chain'
-      GT -> put Unknown  -- discard the current chain
-    Unknown -> put Unknown
-  x <- lift k
-  modify (ColoringStep c)
-  return x
-{-# INLINE descend #-}
+coroutineSum
+  :: (MonadPlus m, Foldable f, Functor f)
+  => f (Coroutine s m a)
+  -> Coroutine s m a
+coroutineSum = Coroutine . msum . fmap resume
 
 canonicalColoringStep
   :: Vector F
   -> Seed
-  -> RWST
-       (Algebra, V.Vector (E.Element s IS.IntSet))
-       (Seq (Vector Int))
-       LeastChain
-       (ST s)
-       ()
+  -> Coroutine
+       (Yield SortedColoring)
+       ( LogicT
+           (ReaderT (Algebra, V.Vector (E.Element s IS.IntSet)) (ST s))
+       )
+       (Vector F)
 canonicalColoringStep v seed = do
-  (Algebra _ f f'iso, eq) <- ask
+  (Algebra _ f _, eq) <- lift ask
   let ((v', twist'i), seed') = runInvariantM ((,) <$> f v <*> twist) seed
-  descend (coloring v') $ case findSmallest2Group (toList v') of
-    Nothing -> get >>= \case
-      Result vs -> do
-        let (vs', m'p) = addToResult f'iso vs v'
-        put (Result vs')
-        case m'p of
-          Just p -> do
-            tell (singleton p)
-            liftST $ mergePermutationImage eq p
-          Nothing -> return ()
-      _ -> put (Result (v' NE.:| []))
+  suspend . Yield (coloring v') $ case findSmallest2Group (toList v') of
+    Nothing      -> return v'
     Just (i, ws) -> do
       let i' = twist'i i
       visited <- liftST $ newSTRef IS.empty
-      forM_ (IS.toList ws) $ \w -> do
+      coroutineSum . (`map` IS.toList ws) $ \w -> do
         unprocessed <- liftST $ do
           vs    <- readSTRef visited
           w_set <- IS.intersection ws <$> E.find (eq V.! w)
           let vs' = vs `IS.union` w_set
           writeSTRef visited vs'
           return (IS.size w_set + IS.size vs == IS.size vs')
-        when unprocessed $ canonicalColoringStep (updateIndex w i' v') seed'
+        if unprocessed
+          then canonicalColoringStep (updateIndex w i' v') seed'
+          else coroutineZero
 {-# INLINE canonicalColoringStep #-}
+
+data StepResult s
+  = Result !(NE.NonEmpty (Vector F)) !(Seq (Vector Int))
+    | ColoringStep !SortedColoring !(Coroutine
+       (Yield SortedColoring)
+       ( LogicT
+           (ReaderT (Algebra, V.Vector (E.Element s IS.IntSet)) (ST s))
+       )
+       (Vector F))
+
+mergeSteps
+  :: (Vector Int -> Bool) -> StepResult s -> StepResult s -> StepResult s
+mergeSteps _ r@Result{}           (ColoringStep _ _)   = r
+mergeSteps _ (  ColoringStep _ _) r@Result{}           = r
+mergeSteps _ r@(ColoringStep c k) s@(ColoringStep d l) = case compare c d of
+  LT -> r
+  EQ -> ColoringStep d (l `coroutinePlus` k)
+  GT -> s
+mergeSteps f'iso (Result us ps) (Result vs qs) = uncurry Result
+  $ foldr addTo (us, ps <> qs) vs
+ where
+  addTo v (a'us, rs) = second (maybe rs (rs |>)) (addToResult f'iso a'us v)
+{-# INLINE mergeSteps #-}
+
+runStepLevel
+  :: Coroutine
+       (Yield SortedColoring)
+       (LogicT (ReaderT (Algebra, V.Vector (E.Element s IS.IntSet)) (ST s)))
+       (Vector F)
+  -> ReaderT
+       (Algebra, V.Vector (E.Element s IS.IntSet))
+       (ST s)
+       (StepResult s)
+runStepLevel k = fromJust <$> runLogicT (resume k) addStepM (return Nothing)
+ where
+  -- toStep :: Either (Yield SortedColoring a) (Vector F) -> StepResult s
+  toStep (Left  (Yield c l)) = ColoringStep c l
+  toStep (Right v          ) = Result (v NE.:| []) mempty
+  addStepM e m'r = do
+    (Algebra _ _ f'iso, _) <- ask
+    let s = toStep e
+    Just . maybe s (mergeSteps f'iso s) <$> m'r
+{-# INLINE runStepLevel #-}
+
+iterateStepLevels
+  :: Coroutine
+       (Yield SortedColoring)
+       (LogicT (ReaderT (Algebra, V.Vector (E.Element s IS.IntSet)) (ST s)))
+       (Vector F)
+  -> ReaderT
+       (Algebra, V.Vector (E.Element s IS.IntSet))
+       (ST s)
+       (NE.NonEmpty (Vector F), Seq (Vector Int))
+iterateStepLevels = runStepLevel >=> unpack
+ where
+  unpack (Result       vs ps) = return (vs, ps)
+  unpack (ColoringStep _  l ) = iterateStepLevels l
+{-# INLINE iterateStepLevels #-}
 
 totalInvariant :: Seed -> Vector F -> F
 totalInvariant s is = VS.sum . fst $ runInvariantM (sortAndTwistV is) s
@@ -281,10 +313,11 @@ canonicalColoring
 canonicalColoring k
   | (a@(Algebra n _ _), seed0) <- runInvariantM k initialSeed
   , n > 0
-  = let (chain, ps) = runST $ do
+  = let (is@(i NE.:| _), ps) = runST $ do
           eq <- V.generateM n (E.newElement . IS.singleton)
-          execRWST (canonicalColoringStep (konst 1 n) seed0) (a, eq) Unknown
-        is@(i NE.:| _) = fromJust (chainResult chain)
+          runReaderT
+            (iterateStepLevels (canonicalColoringStep (konst 1 n) seed0))
+            (a, eq)
     in  (fromIntegral (NE.length is) * totalInvariant seed0 i, is, ps)
   | otherwise
   = (0, VS.empty NE.:| [], mempty)

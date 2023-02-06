@@ -5,6 +5,13 @@ _Disclaimer: This is not an official Google product._
 A matrix-based algorithm to compute graph invariants (or more generally
 arbitrary algebra invariants) and their automorphism groups.
 
+Branch **breadth-first**: This is an experimental branch that traverses the
+search tree breadth-first, rather than depth-first. For certain otherwise
+difficult graphs with small automorphism groups this can make the algorithm run
+considerably faster (at the expense of high memory complexity). However it
+performs poorly on graphs with large automorphism groups such as empty or
+clique graphs.
+
 Given:
 
 1. an input file path in the _bliss_ (DIMACS textual graph file format,
